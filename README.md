@@ -12,6 +12,13 @@ para gravação em memória flash (padrão: 29L3211, 4 MB / 32 Mbit).
 - Preenche o restante da capacidade da flash selecionada com `0xFF`.
 - Bloqueia merges inválidos: mapeamento misto, ROM não identificada, ou tamanho total maior
   que a capacidade da flash.
+- Evita "endereço flutuando": quando o número de jogos não preenche todas as posições de
+  endereço da placa PIC do usuário, uma das ROMs se repete inteira para ocupar a posição extra.
+- Interface em cards, com arrastar-e-soltar para importar ROMs.
+- Quando há internet, busca automaticamente a capa de cada jogo (via
+  [libretro-thumbnails](https://github.com/libretro-thumbnails), sem necessidade de cadastro/API
+  key) e guarda em cache local (`~/.snes_rom_forge/boxart_cache/`); sem internet ou sem capa
+  encontrada, mantém um banner colorido com o título do jogo.
 
 ## Como rodar
 
@@ -44,4 +51,3 @@ reproduzíveis. As pastas `build/` e `dist/` são geradas a cada build e não de
 - Perfis de placa/CPLD com bank-switching customizado (endereços embaralhados).
 - Modo de bancos manual (posicionar cada ROM em um offset específico).
 - Salvar/abrir projeto (`.srmproj`).
-- Drag-and-drop na lista de ROMs.
