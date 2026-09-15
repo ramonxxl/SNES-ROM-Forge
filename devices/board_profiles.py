@@ -7,30 +7,56 @@ combinação dessas 2 linhas e o jogo selecionado boota normalmente pelo própri
 vetor de reset — sem stub nem marcador extra gravado na ROM (o PIC em si é
 gravado à parte, fora deste programa).
 
-Como essas linhas de endereço são compartilhadas por TODOS os jogos da mesma
-gravação, todo jogo precisa ocupar um slot do MESMO tamanho: capacidade da
-flash dividida pelo número de posições de endereço usadas. Com 2 linhas de
-endereço só existem 4 posições possíveis (2 bits = 2^2), então o número de
-slots é sempre a próxima potência de 2 a partir da quantidade de ROMs
-carregadas (1, 2 ou 4) — 3 jogos, por exemplo, ainda usam 4 posições de 1 MB,
-sobrando uma vazia (preenchida com 0xFF).
+Como essas 2 linhas só têm 4 combinações possíveis (2 bits), NENHUMA das 4
+posições pode ficar sem um jogo atribuído — um endereço "flutuando" (flash em
+branco) faria o SNES travar se o PIC algum dia parasse ali. Por isso, quando o
+número de ROMs não preenche as 4 posições sozinho (ex.: 3 jogos), uma das ROMs
+precisa se repetir inteira (cabeçalho e tudo) para ocupar a(s) posição(ões)
+que sobrariam — exatamente como um jogo que já é naturalmente maior ocuparia
+mais de uma posição sozinho.
 """
 
 from __future__ import annotations
 
 from core.rom import SNESRom
 
-
-def _next_power_of_two(n: int) -> int:
-    if n <= 1:
-        return 1
-    return 1 << (n - 1).bit_length()
+DEFAULT_BASE_UNIT_BYTES = 1024 * 1024  # 1 MB — o que cada combinação de endereço cobre
 
 
-def resolve_slot_sizes(roms: list[SNESRom], flash_capacity_bytes: int) -> list[int]:
-    """Calcula o tamanho de slot uniforme (capacidade da flash / nº de posições)."""
+def compute_natural_slot_size(rom_size_bytes: int, base_unit_bytes: int = DEFAULT_BASE_UNIT_BYTES) -> int:
+    """Menor múltiplo (potência de 2) da unidade base que cabe a ROM sozinha."""
+    slot_size = base_unit_bytes
+    while slot_size < rom_size_bytes:
+        slot_size *= 2
+    return slot_size
+
+
+def resolve_slot_sizes(
+    roms: list[SNESRom],
+    flash_capacity_bytes: int,
+    base_unit_bytes: int = DEFAULT_BASE_UNIT_BYTES,
+) -> list[int]:
+    """Calcula o slot de cada ROM, expandindo (dobrando) o(s) menor(es) até
+    ocupar EXATAMENTE toda a capacidade da flash — nunca deixando uma posição
+    de endereço sem jogo nenhum atribuído.
+
+    Expande sempre o slot atualmente menor primeiro (e cada expansão dobra um
+    slot já existente, nunca cria um tamanho fora das potências de 2), o que
+    naturalmente evita ter que expandir um jogo que já ocupa mais de uma
+    posição por tamanho próprio.
+    """
     if not roms:
         return []
-    num_slots = _next_power_of_two(len(roms))
-    slot_size = flash_capacity_bytes // num_slots
-    return [slot_size] * len(roms)
+
+    sizes = [compute_natural_slot_size(rom.rom_size_bytes, base_unit_bytes) for rom in roms]
+    total = sum(sizes)
+
+    while total < flash_capacity_bytes:
+        min_index = min(range(len(sizes)), key=lambda i: sizes[i])
+        added = sizes[min_index]
+        if total + added > flash_capacity_bytes:
+            break  # não dá pra fechar exato sem ultrapassar; validate() reporta o excesso
+        sizes[min_index] *= 2
+        total += added
+
+    return sizes

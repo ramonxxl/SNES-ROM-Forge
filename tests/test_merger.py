@@ -71,18 +71,26 @@ def test_merge_matches_user_scenario_two_2mb_games_fill_4mb_flash():
     assert len(data) == flash.capacity_bytes
 
 
-def test_merge_with_3_roms_still_uses_4_slots_of_1mb_leaving_one_unused():
-    # 3 jogos: o hardware só tem 2 linhas de endereço (4 posições possíveis),
-    # então ainda usa slots de 1 MB, com a 4a posição sobrando como padding.
+def test_merge_with_3_roms_expands_one_to_avoid_a_floating_address():
+    # 3 jogos: com só 2 linhas de endereço (4 posições possíveis), nenhuma
+    # posição pode ficar sem jogo (endereço "flutuando" = flash em branco se o
+    # PIC parar ali). A primeira ROM se repete inteira (1 MB -> 2 MB) para
+    # preencher a posição que sobraria, em vez de deixá-la em branco.
     roms = [_make_rom(f"g{i}.sfc", "lorom", 0x100000) for i in range(3)]
     flash = FlashProfile("29L3211", 4 * 1024 * 1024)
 
     data, report = merge(roms, flash)
 
-    assert report.slot_sizes == [0x100000] * 3
-    assert report.total_roms_size == 3 * 0x100000
-    assert report.padding_size == flash.capacity_bytes - 3 * 0x100000  # a 4a posição, vazia
+    assert report.slot_sizes == [0x200000, 0x100000, 0x100000]
+    offsets = [offset for _, offset, _ in report.rom_offsets]
+    assert offsets == [0, 0x200000, 0x300000]
+    assert report.padding_size == 0
     assert len(data) == flash.capacity_bytes
+
+    # a rom0 (expandida) aparece inteira, com header válido, nas duas metades do seu slot de 2 MB
+    rom0_size = report.rom_offsets[0][2]
+    assert data[0:rom0_size] == data[0x100000:0x100000 + rom0_size]
+    assert checksum.is_checksum_valid(data[0x100000:0x100000 + rom0_size], roms[0].header_offset)
 
 
 def test_merge_blocks_rom_bigger_than_computed_slot():
